@@ -1,16 +1,15 @@
 {
-  "page" : {
-    "mappings" : {
-      "properties" : {
-        "title" : {
-          "type" : "text"
-        },
-        "content" : {
-          "type" : "text"
-        },
-        "url": {
-          "type": "keyword"
-        }
+  "mappings" : {
+    "properties" : {
+      "title" : {
+        "type" : "text"
+      },
+      "content" : {
+        "type" : "text"
+      },
+      "url": {
+        "type": "keyword"
+      }
     }
   }
 }
