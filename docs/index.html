@@ -7,7 +7,7 @@
       function makeCall(term) {
         var headers = new Headers()
 
-        headers.append('Authorization', `Basic ${urlParams.get("token")}`)
+        headers.append('Authorization', 'Basic ' + urlParams.get("token")})
         headers.append('Content-Type', 'application/json')
   
         var body = `
