@@ -1,1 +1,61 @@
+<html>
+  <head>
+  	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script>
+    	var urlParams = new URLSearchParams(window.location.search);
 
+    	function makeCall(term) {
+    		var headers = new Headers()
+
+    		headers.append('Authorization', 'Basic ${urlParams.get("token")}')
+    		headers.append('Content-Type', 'application/json')
+	
+    		var body = `
+    			{ 
+    				"query": { 
+    					"match": {
+    						"content": "${term}"
+    					} 
+    				},
+    				"highlight" : {
+        			"pre_tags" : ["<b>"],
+        			"post_tags" : ["</b>"],
+						  "fields" : {
+						    "content" : {}
+						  }
+						}
+    			}
+    		`
+
+    		fetch('https://ad68d56022cd4c5cbc21527d27be6ef8.eu-west-1.aws.found.io:9243/page/_search', {
+      	  mode: 'cors',
+      	  credentials: 'include',
+      	  body: body,
+      	  method: 'POST',
+      	  headers: headers
+    		})
+    		.then(response => response.json())
+    		.then(json => addResults('content', json))
+    	}
+
+    	function addResults(parentId, json) {
+    		for(var i in json.hits.hits) {
+		    	document.getElementById(parentId).innerHTML += `
+		    	    <div class="mb-4" data-role="panel" data-cls-title-caption="text-bold">
+		    	        <div class="d-flex flex-justify-between p-2">
+		    	            <div>
+		    	                <span>${json.hits.hits[i]._source.title} - ${json.hits.hits[i].highlight.content}</span>
+		    	            </div>
+		    	        </div>
+		    	    </div>
+		    	`;
+		    }
+		}
+    </script>
+  </head>
+  <body>
+		<input id="input" type="text" name="fname">
+		<input type="button" onclick="makeCall(document.getElementById('input').value)" value="Send">
+  	<div id="content"/>
+  </body>
+</html>
