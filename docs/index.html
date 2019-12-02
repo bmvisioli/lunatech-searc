@@ -23,23 +23,49 @@
         margin: 0;
         padding: 0;
       }
+      select {
+        -webkit-appearance: button;
+        -moz-appearance: button;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -webkit-padding-end: 20px;
+        -moz-padding-end: 20px;
+        -webkit-padding-start: 2px;
+        -moz-padding-start: 2px;
+        background-color: #FFFFFF;
+        background-position: center right;
+        background-repeat: no-repeat;
+        border: 1px solid #AAA;
+        border-radius: 2px;
+        box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
+        color: #555;
+        font-size: inherit;
+        margin: 0;
+        overflow: hidden;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 80px;
+      }
+      .row {
+        margin-right: -60px;
+      }
       .search-bar {
         padding-top: 10px;
         padding-bottom: 10px;
+        max-height: 40px;
       }
       .cm-s-default { 
         border-radius: 8px;
         border: 1px solid #dfe1e5;
       }
       .term {
-        background: #fff;
         display: flex;
-        border-radius: 8px;
+        background: #fff;
         border: 1px solid #dfe1e5;
         box-shadow: none;
-        height: 39px;
         width: 638px;
-        border-radius: 24px;
         height: 40px;
         margin: 0 auto;
         padding-left: 20px;
@@ -54,20 +80,27 @@
         margin-top: 20px;
         margin-left: 20px;
         clear: both;
-        width: 70%;
         min-height: 0;
         float: left;
-
+        overflow-y: scroll;
       }
-      .query-params-panel {
-        width: 30%
+      .params-panel {
+        margin-top: 20px;
+        margin-right: 20px;
+        clear: both;
+        min-height: 0;
         float: right;
+        display: block;
+      }
+      .CodeMirror { 
+        width: 60%;
+        margin-right: 20px;
       }
       .result-line {
-        position: relative;
         display: block;
         line-height: 1.2;
         text-align: left;
+        width: 90%;
       }
       .result-title {
         font-size: 20px;
@@ -96,7 +129,7 @@
         font-size: 14px;
         text-align: left;
       }
-      .result-stats-panel {
+      .result-stats-panel, #updateStatus, .greyText {
         font-size: 14px;
         line-height: 43px;
         top: 0;
@@ -110,12 +143,84 @@
         white-space: nowrap;
         display: block;
       }
+      button {
+        background-image: -webkit-linear-gradient(top,#f5f5f5,#f1f1f1);
+        background-color: #f2f2f2;
+        border: 1px solid #f2f2f2;
+        border-radius: 4px;
+        color: #5F6368;
+        font-size: 14px;
+        margin: 11px 4px;
+        padding: 0 16px;
+        line-height: 27px;
+        height: 36px;
+        min-width: 54px;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .selectedButton {
+        background-image: -webkit-linear-gradient(top,#8b0000,#8b0000);
+        background-color: #8b0000;
+        border: 1px solid #8b0000;
+        color: #FFFFFF;
+      }
+      .progressButton {
+        background-image: -webkit-linear-gradient(top,#ffffed,#ffffed);
+        background-color: #ffffed;
+        border: 1px solid #ffffed;
+        color: #000000;
+      }
+      .doneButton {
+        background-image: -webkit-linear-gradient(top,#90ee90,#90ee90);
+        background-color: #90ee90;
+        border: 1px solid #90ee90;
+        color: #000000;
+      }
+      .drop-down-container {
+        display: flex;
+        margin: 0 auto;
+      }
+      .dropdown-content {
+        display: none;
+        width: 638px;
+        box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+        margin: 0 auto;
+        z-index: 100;
+      }
+      .dropdown-content span {
+        background-color: #ffffff;
+        color: black;
+        padding: 12px 16px;
+        text-decoration: none;
+        display: flex;
+      }
+      .dropdown-content span:hover {
+        background-color: #ddd;
+        cursor: pointer;
+      }
+      .show {
+        display: block;
+      }
+      .main-panel, .result-stats-panel {
+        z-index: -1;
+      }
+      .query-params {
+        font-size: 12px;
+        line-height: 20px;
+        padding: 30px;
+      }
+      .query-params-row {
+        display: flex;
+      }
     </style>
     <script>
+      var elsUrl = 'http://34.83.143.116:9200'
       var urlParams = new URLSearchParams(window.location.search)
       var headers = new Headers()
-      headers.append('Authorization', 'Basic ' + urlParams.get("token"))
+      headers.append('Authorization', 'Basic ' + urlParams.get('token'))
       headers.append('Content-Type', 'application/json')
+      var fetchParams = { mode: 'cors', headers: headers, method: 'GET' }
 
       String.prototype.format = function () {
         var a = this;
@@ -130,53 +235,182 @@
       }
 
       var timer;
-      function delayed(func) {
+      function delayed(time, func) {
         clearTimeout(timer);
         timer = setTimeout(function () {
             func();
-        }, 1000);
+        }, time);
       }
 
-      var editor;
+      var defaultQuery = `
+      {
+        "query": {
+          "multi_match": {
+            "query" : "{0}",
+            "fields" : [
+              "content.{1}^{2}",
+              "content.en^{3}",
+              "content.*^1",
+              "title.{1}^{2}",
+              "title.en^{3}",
+              "title.*^1"
+            ]
+          }
+        },
+        "highlight" : {
+          "fragment_size": "{5}",
+          "pre_tags" : ["<b>"],
+          "post_tags" : ["</b>"],
+          "fields" : {
+            "content.{1}" : {},
+            "title.{1}" : {}
+          }
+        },
+        "sort": [
+          { "_score": "{4}" }
+        ]
+      }`
+
+      var queryEditor;
       $('#query').ready(function() {
-        editor = CodeMirror.fromTextArea($('#query')[0], {
+        queryEditor = CodeMirror.fromTextArea($('#query')[0], {
           matchBrackets: true,
           autoCloseBrackets: true,
           mode: 'application/json',
           lineWrapping: true
         });
+        queryEditor.setValue(JSON.stringify(JSON.parse(defaultQuery), undefined, 2))
       });
 
-      function makeCall(term) {
-        var body = editor.getValue().format(term)
+      var mappingEditor;
+      $('#mapping').ready(function() {
+        mappingEditor = CodeMirror.fromTextArea($('#mapping')[0], {
+          matchBrackets: true,
+          autoCloseBrackets: true,
+          mode: 'application/json',
+          lineWrapping: true
+        });
+        getMappingAndSettings()
+      });
 
-        fetch('https://ad68d56022cd4c5cbc21527d27be6ef8.eu-west-1.aws.found.io:9243/page/_search', {
-          mode: 'cors',
-          body: body,
-          method: 'POST',
-          headers: headers
-        })
+      async function getMappingAndSettings() {
+        var mappingObj = await fetch(elsUrl + '/page/_mapping', fetchParams).then(response => response.json())
+        var analysis = await fetch(elsUrl + '/page/_settings', fetchParams).then(response => response.json())
+        var analysisObj = { analysis: analysis.page.settings.index.analysis }
+        var filters = analysisObj.analysis.filter
+
+        $('#en-synonym').html(filters.english_synonym.synonyms.join('\n'))
+        $('#fr-synonym').html(filters.french_synonym.synonyms.join('\n'))
+        $('#nl-synonym').html(filters.dutch_synonym.synonyms.join('\n'))
+
+        filters.english_synonym.synonyms = '{1}'
+        filters.french_synonym.synonyms = '{2}'
+        filters.dutch_synonym.synonyms = '{3}'
+
+        var settingsObj = { settings: analysisObj }
+        var full = { ...settingsObj, ...mappingObj.page }
+        mappingEditor.setValue(JSON.stringify(full, undefined, 2))
+      }
+
+
+      $('#search-input').ready(function() {
+        var input = document.getElementById('search-input');
+        input.addEventListener('keyup', function(e) {
+          event.preventDefault();
+          if (e.keyCode === 13 || e.which === 13) {
+            makeSearch()
+          }
+        });
+
+        input.addEventListener('keydown', function(e) {
+          if (event.key.length == 1){ 
+            delayed(500, function() { 
+              autoComplete(valueById('search-input'))
+            })
+          }
+        });
+      })
+
+      function updateSchema() {
+        $('#bt-update').addClass('progressButton')
+        $('#bt-update').empty().append('Doing!')
+        fetch(elsUrl + '/page/_search?q=*', fetchParams)
+          .then(response => response.json())
+          .then(response => {
+            var operation = '{ "index" : { "_index" : "page" } }'
+            var resultsBulk = ''
+            for(var i in response.hits.hits) {
+              resultsBulk += operation + '\n' + JSON.stringify(response.hits.hits[i]._source) + '\n'
+            }
+            return resultsBulk
+          })
+          .then(response => {
+            return fetch(elsUrl + '/page', {...fetchParams, method: 'DELETE' })
+            .then(r => {
+              var mapping = JSON.parse(mappingEditor.getValue())
+              mapping.settings.analysis.filter.english_synonym.synonyms = $('#en-synonym').val().split('\n')
+              mapping.settings.analysis.filter.french_synonym.synonyms = $('#fr-synonym').val().split('\n')
+              mapping.settings.analysis.filter.dutch_synonym.synonyms = $('#nl-synonym').val().split('\n')
+
+              fetch(elsUrl + '/page', {...fetchParams, method: 'PUT', body: JSON.stringify(mapping) })
+            })
+            .then(r => fetch(elsUrl + '/page/_bulk', {...fetchParams, method: 'POST', body: response }))
+            .then(r => {
+              $('#bt-update').empty().append('Done!')
+              $('#bt-update').removeClass('progressButton')
+              $('#bt-update').addClass('doneButton')
+              delayed(1000, function() {
+                $('#bt-update').empty().append('Update')
+                $('#bt-update').removeClass('doneButton') 
+              })
+            })
+          })
+      }
+
+      function makeSearch() {
+        var term = valueById('search-input')
+        var body = queryEditor.getValue().format(term, getLanguage(), getLanguageBoost(), getEnglishBoost(), getSortDirection(), getHighlighSize())
+
+        fetch(elsUrl + '/page/_search', { ...fetchParams, body: body, method: 'POST' })
         .then(response => response.json())
         .then(json => {
           addResults('content-panel', json)
           setStatus('result-stats', json)
+          $('#autoDropDown').removeClass('show');
         })
       }
 
       function getNodeValue(hit, nodeName, join) {
-        var node = hit.highlight[nodeName]
-        return (node == null ? hit._source[nodeName] : node.join(join))
+        var highlight = hit.highlight
+        if(hit.highlight != null) {
+          var node = hit.highlight[nodeName]
+          return (node == null ? hit._source[nodeName] : node.join(join))
+        } else {
+          return hit._source[nodeName]
+        }
       }
 
       function setStatus(parentId, json) {
         $('#' + parentId).empty().append(`${json.hits.total.value} result(s) (${json.took/1000} seconds)`)
       }
 
+      function getLanguage() { return $('#select-language').val(); }
+      function getLanguageBoost() { return $('#lang-boost').val(); }
+      function getEnglishBoost() { return $('#eng-boost').val(); }
+      function getSortDirection() { return $('#select-sort-direction').val(); }
+      function getHighlighSize() { return $('#highlight-size').val(); }
+
+      function selectAutocomplete(term) {
+        $('#search-input').val(term)
+        $('#autoDropDown').removeClass('show')
+        makeSearch()
+      }
+
       function addResults(parentId, json) {
         $('#' + parentId).empty()
         for(var i in json.hits.hits) {
-          var contentValue = getNodeValue(json.hits.hits[i], 'content', '...')
-          var titleValue = getNodeValue(json.hits.hits[i], 'title', '')
+          var contentValue = getNodeValue(json.hits.hits[i], 'content.' + getLanguage(), '... ')
+          var titleValue = getNodeValue(json.hits.hits[i], 'title.' + getLanguage(), '')
           var urlValue = getNodeValue(json.hits.hits[i], 'url', '')
           $('#' + parentId).append(`
             <div class="result-line">
@@ -187,19 +421,70 @@
                   <a href="${json.hits.hits[i]._source.url}" class="result-url">${urlValue}</a>
                 </div>
                 <div class="result-content">
-                  <span>${contentValue.substring(0,300)}</span>
+                  <span>${contentValue.substring(0,400)}</span>
                 </div>
             </div>
           `);
         }
     }
+
+    function autoComplete(term) {
+      $('#autoDropDown').empty()
+      var lang = getLanguage()
+      var autocomplete = `
+        { "query": { "multi_match": { "query": "${term}", "type": "bool_prefix", "fields": ["title.${lang}^5","title.${lang}._2gram^5","title.${lang}._3gram^5","title.en^2","title.en._2gram^2","title.en._3gram^2", "title.*","title.*._2gram","title.*._3gram"] } } }`
+      
+      fetch(elsUrl + '/page/_search', { ...fetchParams, body: autocomplete, method: 'POST' })
+      .then(response => response.json())
+      .then(json => {
+        for(var i in json.hits.hits) {
+          var titleValue = getNodeValue(json.hits.hits[i], 'title.' + getLanguage(), '')
+          $('#autoDropDown').append(`<span onclick="selectAutocomplete('${titleValue}')">${titleValue}</span>`)
+        }
+      })
+      $('#autoDropDown').addClass('show');
+    }
+
+    function toggleQueryPanels(selection) {
+      if(selection === 'json') {
+        $('#query-panel-user').css('display', 'none')
+        $('#query-panel-json').css('display', 'block')
+        $('#bt-query-user').removeClass('selectedButton')
+        $('#bt-query-json').addClass('selectedButton')
+        queryEditor.refresh()
+      } else {
+        $('#query-panel-user').css('display', 'block')
+        $('#query-panel-json').css('display', 'none')
+        $('#bt-query-json').removeClass('selectedButton')
+        $('#bt-query-user').addClass('selectedButton')
+      }
+    }
+
+    function toggleMappingPanels(selection) {
+      if(selection === 'json') {
+        $('#mapping-panel-user').css('display', 'none')
+        $('#mapping-panel-json').css('display', 'block')
+        $('#bt-mapping-user').removeClass('selectedButton')
+        $('#bt-mapping-json').addClass('selectedButton')
+        mappingEditor.refresh()
+      } else {
+        $('#mapping-panel-user').css('display', 'block')
+        $('#mapping-panel-json').css('display', 'none')
+        $('#bt-mapping-json').removeClass('selectedButton')
+        $('#bt-mapping-user').addClass('selectedButton')
+      }
+    }
+
     </script>
   </head>
-  <body width="100%">
-    <div class="container">
+  <body>
+    <div class="container-fluid">
       <div class="row search-bar">
         <div class="col">
-          <input id="input" type="text" class="term" onkeyup="delayed(function(){ makeCall(valueById('input')) })">
+          <input id="search-input" type="text" class="term">
+          <div class="drop-down-container">
+            <div id="autoDropDown" class="dropdown-content">&nbsp;</div>
+          </div>
         </div>
       </div>
       <div class="row result-stats-panel">
@@ -207,29 +492,78 @@
           <span id="result-stats">&nbsp;</span>
         </div>
       </div>
-      <div id="main-panel" class="row">
-        <div id="content-panel" class="content-panel" class="col">&nbsp;</div>
-        <div id="query-params-panel" class="col">
-
-          <textarea id="query" class="query" rows="20" cols="30">
-{
-  "query": {
-    "multi_match": {
-      "query" : "{0}",
-      "fields" : ["content", "title"]
-    }
-  },
-  "highlight" : {
-    "fragment_size": 200,
-    "pre_tags" : ["<b>"],
-    "post_tags" : ["</b>"],
-    "fields" : {
-      "content" : {},
-      "title" : {}
-    }
-  }
-}
-          </textarea>
+      <div class="row main-panel" onclick="$('#autoDropDown').removeClass('show')">
+        <div id="content-panel" class="col-9 content-panel">&nbsp;</div>
+        <div class="col params-panel">
+          <div class="row" style="display: block;">
+            <div class="row">
+              <button id="bt-query-user" onclick="toggleQueryPanels('user')" class="selectedButton">Params</button>
+              <button id="bt-query-json" onclick="toggleQueryPanels('json')">JSON</button>
+              <button onclick="makeSearch()">Search</button>
+            </div>
+            <div class="row" style="display: block">
+              <div id="query-panel-user" class="query-panel-user">
+                <div class="CodeMirror cm-s-default CodeMirror-wrap greyText query-params">
+                  <div class="row">
+                    <div class="col-6">User Language {1}</div>
+                    <div class="col-4">
+                      <select id="select-language">
+                        <option value="en" checked="true">English</option>
+                        <option value="fr">French</option>
+                        <option value="nl">Dutch</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">Language boost {2}</div>
+                    <div class="col-4"><input id="lang-boost" type="text" size="3" value="5"></div>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">English boost {3}</div>
+                    <div class="col-4"><input id="eng-boost" type="text" size="3" value="2"></div>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">Sort Direction {4}</div>
+                    <div class="col-4">
+                      <select id="select-sort-direction">
+                        <option value="desc">Desc</option>
+                        <option value="asc">Asc</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">Highlight size {5}</div>
+                    <div class="col-4"><input id="highlight-size" type="text" size="3" value="200"></div>
+                  </div>
+                </div>
+              </div>
+              <div id="query-panel-json" class="query-panel-json" style="display: none;">
+                <textarea id="query" rows="20" cols="30"></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="display: block;">
+            <div class="row">
+              <button id="bt-mapping-user" onclick="toggleMappingPanels('user')" class="selectedButton">Params</button>
+              <button id="bt-mapping-json" onclick="toggleMappingPanels('json')">JSON</button>
+              <button id="bt-update" onclick="updateSchema()">Update</button>
+            </div>
+            <div class="row" style="display: block">
+              <div id="mapping-panel-user" class="mapping-panel-user">
+                <div class="CodeMirror cm-s-default CodeMirror-wrap greyText query-params">
+                  <div class="row"><div class="col">English synonyms {1}</div></div>
+                  <div class="row"><div class="col"><textarea id="en-synonym" cols="25"></textarea></div></div>
+                  <div class="row"><div class="col">French synonyms {2}</div></div>
+                  <div class="row"><div class="col"><textarea id="fr-synonym" cols="25"></textarea></div></div>
+                  <div class="row"><div class="col">Dutch synonyms {3}</div></div>
+                  <div class="row"><div class="col"><textarea id="nl-synonym" cols="25"></textarea></div></div>
+                </div>
+              </div>
+              <div id="mapping-panel-json" style="display: none;">
+                <textarea id="mapping" rows="20" cols="30">&nbsp;</textarea>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
